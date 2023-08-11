@@ -49,14 +49,61 @@ document.addEventListener("mouseup", () => {
 });
 
 canvas.addEventListener("wheel", (e) => {
-    if (e.deltaY < 0) {
-      zoom *= 1.1;
-    } else {
-      zoom /= 1.1;
-    }
-  
+  if (e.deltaY < 0) {
+    zoom *= 1.1;
+  } else {
+    zoom /= 1.1;
+  }
+
+  render();
+});
+
+let touchStartX = 0;
+let touchStartY = 0;
+let initialZoom = 1;
+
+canvas.addEventListener("touchstart", (e) => {
+  if (e.touches.length === 1) {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+  } else if (e.touches.length === 2) {
+    initialZoom = zoom;
+  }
+});
+
+canvas.addEventListener("touchmove", (e) => {
+  e.preventDefault();
+
+  if (e.touches.length === 1) {
+    const deltaX = e.touches[0].clientX - touchStartX;
+    const deltaY = e.touches[0].clientY - touchStartY;
+
+    cameraX -= deltaX / zoom;
+    cameraY -= deltaY / zoom;
+
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+
     render();
-  });
+  } else if (e.touches.length === 2) {
+    const touch1 = e.touches[0];
+    const touch2 = e.touches[1];
+
+    const distance = Math.sqrt(
+      (touch2.clientX - touch1.clientX) ** 2 + (touch2.clientY - touch1.clientY) ** 2
+    );
+
+    zoom = initialZoom * (distance / initialDistance);
+
+    render();
+  }
+});
+
+canvas.addEventListener("touchend", () => {
+  initialDistance = null;
+});
+
+let initialDistance = null;
 
 class Particle {
   constructor(x, y, vx, vy, mass, color) {
