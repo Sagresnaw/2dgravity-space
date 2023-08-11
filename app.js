@@ -15,6 +15,15 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
+const guideButton = document.getElementById("guide-btn");
+guideButton.addEventListener("click", () => {
+  showOrbits = !showOrbits;
+  render();
+});
+
+const resetButton = document.getElementById("reset-btn");
+resetButton.addEventListener("click", resetSimulation);
+
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
 let isDragging = false;
@@ -196,6 +205,20 @@ for (let i = 0; i < 1000; i++) {
   const color = "white";
 
   particles.push(new Particle(x, y, vx, vy, mass, color));
+}
+
+function resetSimulation() {
+  particles.length = 0;
+  for (let i = 0; i < 1000; i++) {
+    const x = Math.random() * canvas.width;
+    const y = Math.random() * canvas.height;
+    const vx = (Math.random() - 0.5) * 0.5;
+    const vy = (Math.random() - 0.5) * 0.5;
+    const mass = Math.random() * 2;
+    const color = "white";
+
+    particles.push(new Particle(x, y, vx, vy, mass, color));
+  }
 }
 
 function render() {
