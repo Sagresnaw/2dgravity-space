@@ -8,21 +8,35 @@ let cameraY = canvas.height / 2;
 let zoom = 1;
 let showOrbits = false;
 
+function toggleShowOrbits() {
+  showOrbits = !showOrbits;
+  render();
+}
+
 document.addEventListener("keydown", (e) => {
   if (e.key === "g" || e.key === "G") {
-    showOrbits = !showOrbits;
+    toggleShowOrbits();
     render();
   }
 });
 
-const guideButton = document.getElementById("guide-btn");
-guideButton.addEventListener("click", () => {
-  showOrbits = !showOrbits;
-  render();
+canvas.addEventListener("click", (e) => {
+  const canvasRect = canvas.getBoundingClientRect();
+  const mouseX = e.clientX - canvasRect.left;
+  const mouseY = e.clientY - canvasRect.top;
+
+  // guide button
+  if (mouseX >= 10 && mouseX <= 110 && mouseY >= 50 && mouseY <= 100) {
+    toggleShowOrbits();
+  }
+  // reset button
+  if (mouseX >= 10 && mouseX <= 110 && mouseY >= 110 && mouseY <= 150) {
+    resetSimulation();
+  }
 });
 
-const resetButton = document.getElementById("reset-btn");
-resetButton.addEventListener("click", resetSimulation);
+
+
 
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
@@ -246,6 +260,30 @@ function render() {
   ctx.font = "30px Arial";
   ctx.fillStyle = "white";
   ctx.fillText(`Particles: ${particles.length}`, 10, 30);
+
+  // guide button
+  ctx.beginPath();
+  ctx.rect(10, 50, 100, 50);
+  ctx.fillStyle = "white";
+  ctx.fill();
+  ctx.fillStyle = "black";
+  ctx.font = "20px Arial";
+  ctx.fillText("Guide", 20, 80);
+
+  // reset button
+  ctx.beginPath();
+  ctx.rect(10, 110, 100, 50);
+  ctx.fillStyle = "white";
+  ctx.fill();
+  ctx.fillStyle = "black";
+  ctx.font = "20px Arial";
+  ctx.fillText("Reset", 20, 140);
+
+  
+
+
+
+
 }
 
 function animate() {
