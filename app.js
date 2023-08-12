@@ -1,25 +1,41 @@
+// Author: Chris Best
+
+// basic setup
 const canvas = document.getElementById("screen");
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 const ctx = canvas.getContext("2d");
+const MAX_PARTICLES = 1000;
 
+// Variables for time control
+let timeFactor = 1; // Initial time factor
+let isPaused = false; // Flag to indicate if simulation is paused
+
+// camera and zoom
 let cameraX = canvas.width / 2;
 let cameraY = canvas.height / 2;
 let zoom = 1;
 let showOrbits = false;
 
+// show guides on particles
 function toggleShowOrbits() {
   showOrbits = !showOrbits;
   render();
 }
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "g" || e.key === "G") {
+  if (e.key === "q" || e.key === "Q") {
+    isPaused = !isPaused;
+  } else if (e.key === "w" || e.key === "W") {
+    timeFactor = 0.5;
+  } else if (e.key === "e" || e.key === "E") {
+    timeFactor = 10;
+  } else if (e.key === "g" || e.key === "G") {
     toggleShowOrbits();
-    render();
   }
 });
 
+// mouse event for buttons
 canvas.addEventListener("click", (e) => {
   const canvasRect = canvas.getBoundingClientRect();
   const mouseX = e.clientX - canvasRect.left;
@@ -30,14 +46,60 @@ canvas.addEventListener("click", (e) => {
     toggleShowOrbits();
   }
   // reset button
-  if (mouseX >= 10 && mouseX <= 110 && mouseY >= 110 && mouseY <= 150) {
+  else if (mouseX >= 10 && mouseX <= 110 && mouseY >= 110 && mouseY <= 150) {
     resetSimulation();
   }
+  // remove all particles button
+  else if (mouseX >= 10 && mouseX <= 110 && mouseY >= 170 && mouseY <= 210) {
+    particles.length = 0;
+    render();
+  }
+
+  // pause button
+  else if (mouseX >= 300 && mouseX <= 325 && mouseY >= 10 && mouseY <= 35) {
+    isPaused = !isPaused;
+    console.log("pause");
+  }
+  // slow down button
+  else if (mouseX >= 270 && mouseX <= 295 && mouseY >= 10 && mouseY <= 35) {
+    timeFactor *= 0.1;
+    console.log("slow down");
+  }
+  // speed up button
+  else if (mouseX >= 330 && mouseX <= 355 && mouseY >= 10 && mouseY <= 35) {
+    timeFactor *= 10;
+    console.log("speed up");
+  }  
+  else {
+// Create a densely packed circle of particles at the clicked position
+const numParticlesInCircle = 30; // Adjust the number of particles as needed
+const circleRadius = 150; // Adjust the radius of the circle as needed
+const centerX = ((mouseX - cameraX) / zoom) + cameraX;
+const centerY = ((mouseY - cameraY) / zoom) + cameraY;
+
+for (let i = 0; i < numParticlesInCircle; i++) {
+  for (let j = 0; j < numParticlesInCircle; j++) {
+    const angle = (j / numParticlesInCircle) * Math.PI * 2;
+    const radius = (circleRadius / numParticlesInCircle) * i;
+    const particleX = centerX + Math.cos(angle) * radius;
+    const particleY = centerY + Math.sin(angle) * radius;
+    const mass =  1;
+    const color = "white";
+
+    particles.push(new Particle(particleX, particleY, 0, 0, mass, color));
+  }
+}
+
+render();
+
+  }
+
+  
 });
 
 
 
-
+// prevent right click menu and drag to pan
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
 let isDragging = false;
@@ -70,7 +132,7 @@ document.addEventListener("mousemove", (e) => {
 document.addEventListener("mouseup", () => {
   isDragging = false;
 });
-
+// zoom in and out
 canvas.addEventListener("wheel", (e) => {
   if (e.deltaY < 0) {
     zoom *= 1.1;
@@ -81,17 +143,17 @@ canvas.addEventListener("wheel", (e) => {
   render();
 });
 
+// attempt at touch controls
 let touchStartX = 0;
 let touchStartY = 0;
 let initialZoom = 1;
 
+// 
 canvas.addEventListener("touchstart", (e) => {
   if (e.touches.length === 1) {
     touchStartX = e.touches[0].clientX;
     touchStartY = e.touches[0].clientY;
-  } else if (e.touches.length === 2) {
-    initialZoom = zoom;
-  }
+  } 
 });
 
 canvas.addEventListener("touchmove", (e) => {
@@ -108,18 +170,7 @@ canvas.addEventListener("touchmove", (e) => {
     touchStartY = e.touches[0].clientY;
 
     render();
-  } else if (e.touches.length === 2) {
-    const touch1 = e.touches[0];
-    const touch2 = e.touches[1];
-
-    const distance = Math.sqrt(
-      (touch2.clientX - touch1.clientX) ** 2 + (touch2.clientY - touch1.clientY) ** 2
-    );
-
-    zoom = initialZoom * (distance / initialDistance);
-
-    render();
-  }
+  } 
 });
 
 canvas.addEventListener("touchend", () => {
@@ -128,6 +179,7 @@ canvas.addEventListener("touchend", () => {
 
 let initialDistance = null;
 
+// particle class and functions "planets"
 class Particle {
   constructor(x, y, vx, vy, mass, color) {
     this.x = x;
@@ -170,30 +222,45 @@ class Particle {
     const ax = (force * dx) / distance;
     const ay = (force * dy) / distance;
 
-    this.vx += ax / this.mass;
-    this.vy += ay / this.mass;
-  }
+    const deltaTime = 1; // Adjust this based on your simulation timestep
+    const impulseX = (ax * deltaTime) / this.mass;
+    const impulseY = (ay * deltaTime) / this.mass;
 
-  checkCollision(other) {
-    const dx = other.x - this.x;
-    const dy = other.y - this.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
+    this.vx += impulseX;
+    this.vy += impulseY;
+}
 
-    if (distance < this.radius + other.radius) {
-      this.mass += other.mass;
+
+checkCollision(other) {
+  const dx = other.x - this.x;
+  const dy = other.y - this.y;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+
+  if (distance < this.radius + other.radius) {
+      const totalMass = this.mass + other.mass;
+      
+      // Calculate weighted average velocity based on masses
+      const averageVx = (this.vx * this.mass + other.vx * other.mass) / totalMass;
+      const averageVy = (this.vy * this.mass + other.vy * other.mass) / totalMass;
+
+      this.mass = totalMass;
       this.radius = Math.min(Math.sqrt(this.mass) * 2, this.maxRadius);
-
-      if (this.mass <= 20) {
-        this.color = "white";
-      } else if (this.mass <= 40) {
-        this.color = "yellow";
+      
+      if (this.mass <= 200) {
+          this.color = "white";
+      } else if (this.mass <= 400) {
+          this.color = "yellow";
       } else {
-        this.color = "red";
+          this.color = "red";
       }
+      
+      // Apply weighted average velocity to the resulting particle
+      this.vx = averageVx;
+      this.vy = averageVy;
 
       particles.splice(particles.indexOf(other), 1);
-    }
   }
+}
 
   drawOrbit() {
     if (showOrbits) {
@@ -208,9 +275,9 @@ class Particle {
     }
   }
 }
-
+// spawn particles
 const particles = [];
-for (let i = 0; i < 1000; i++) {
+for (let i = 0; i < MAX_PARTICLES; i++) {
   const x = Math.random() * canvas.width;
   const y = Math.random() * canvas.height;
   const vx = (Math.random() - 0.5) * 0.5;
@@ -221,9 +288,10 @@ for (let i = 0; i < 1000; i++) {
   particles.push(new Particle(x, y, vx, vy, mass, color));
 }
 
+// reset simulation
 function resetSimulation() {
   particles.length = 0;
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < MAX_PARTICLES; i++) {
     const x = Math.random() * canvas.width;
     const y = Math.random() * canvas.height;
     const vx = (Math.random() - 0.5) * 0.5;
@@ -235,6 +303,7 @@ function resetSimulation() {
   }
 }
 
+// render function
 function render() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -256,7 +325,7 @@ function render() {
   }
 
   ctx.restore();
-
+  // particle count
   ctx.font = "30px Arial";
   ctx.fillStyle = "white";
   ctx.fillText(`Particles: ${particles.length}`, 10, 30);
@@ -279,14 +348,72 @@ function render() {
   ctx.font = "20px Arial";
   ctx.fillText("Reset", 20, 140);
 
-  
+  // remove all particles button
+  ctx.beginPath();
+  ctx.rect(10, 170, 100, 50);
+  ctx.fillStyle = "white";
+  ctx.fill();
+  ctx.fillStyle = "black";
+  ctx.font = "20px Arial";
+  ctx.fillText("Remove", 20, 200);
 
 
+  // pause button
+  ctx.beginPath();
+  ctx.rect(300, 10, 25, 25);
+  ctx.fillStyle = "white";
+  ctx.fill();
+  ctx.fillStyle = "black";
+  ctx.font = "20px Arial";
+  ctx.fillText("||", 305, 28);
 
+  // slow down button
+  ctx.beginPath();
+  ctx.rect(270, 10, 25, 25);
+  ctx.fillStyle = "white";
+  ctx.fill();
+  ctx.fillStyle = "black";
+  ctx.font = "20px Arial";
+  ctx.fillText("-", 277, 28);
+
+  // speed up button
+  ctx.beginPath();
+  ctx.rect(330, 10, 25, 25);
+  ctx.fillStyle = "white";
+  ctx.fill();
+  ctx.fillStyle = "black";
+  ctx.font = "20px Arial";
+  ctx.fillText("+", 337, 28);
 
 }
 
-function animate() {
+const timestep = 1 / 60; // Fixed timestep for simulation updates
+let lastTimestamp = 0;
+
+function animate(timestamp) {
+  if (isPaused) {
+    lastTimestamp = timestamp; // Update lastTimestamp to avoid sudden jumps when resuming
+    requestAnimationFrame(animate);
+    return;
+  }
+
+  const deltaTime = (timestamp - lastTimestamp) / 1000; // Convert to seconds
+  lastTimestamp = timestamp;
+
+  const scaledTimeFactor = timeFactor * deltaTime;
+
+  for (let i = 0; i < scaledTimeFactor; i++) {
+    for (const particle of particles) {
+      for (const other of particles) {
+        if (particle !== other) {
+          particle.applyGravity(other);
+          particle.checkCollision(other);
+        }
+      }
+      particle.update();
+    }
+  }
+
   render();
   requestAnimationFrame(animate);
 }
