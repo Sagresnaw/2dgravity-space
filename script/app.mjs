@@ -201,7 +201,7 @@ class Particle {
     const ax = forceX / this.mass;
     const ay = forceY / this.mass;
 
-    const deltaTime = 1;
+    const deltaTime = timeFactor;
     const impulseX = ax * deltaTime;
     const impulseY = ay * deltaTime;
 
