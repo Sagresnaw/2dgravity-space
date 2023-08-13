@@ -13,8 +13,7 @@ This is a JavaScript-based interactive simulation that models the gravitational 
 
 ## Getting Started
 
-1. Clone or download this repository to your local machine.
-2. Open the `index.html` file in a web browser that supports HTML5 Canvas.
+1. Visit https://sagresnaw.github.io/2dgravity-space/
 
 ## Usage
 
