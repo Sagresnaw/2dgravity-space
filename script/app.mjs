@@ -8,8 +8,6 @@ import { QuadTree, Rectangle, Point } from './quad.mjs';
 const canvas = document.getElementById("screen");
 canvas.width = innerWidth;
 canvas.height = innerHeight;
-const virtualCanvasWidth = 10000;
-const virtualCanvasHeight = 10000;
 const ctx = canvas.getContext("2d");
 const MAX_PARTICLES = 1000;
 
@@ -18,10 +16,12 @@ let timeFactor = 1; // Initial time factor
 let isPaused = false; // Flag to indicate if simulation is paused
 
 // camera and zoom
-let cameraX = canvas.width / 2;
-let cameraY = canvas.height / 2;
+let cameraX = 0;
+let cameraY = 0;
 let zoom = 1;
 let showOrbits = false;
+let spawnParticle = false;
+let spawnDisk = false;
 
 // show guides on particles
 function toggleShowOrbits() {
@@ -29,123 +29,162 @@ function toggleShowOrbits() {
   render();
 }
 
-document.addEventListener("keydown", (e) => {
-  if (e.key === "q" || e.key === "Q") {
-    isPaused = !isPaused;
-  } else if (e.key === "w" || e.key === "W") {
-    timeFactor = 0.5;
-  } else if (e.key === "e" || e.key === "E") {
-    timeFactor = 10;
-  } else if (e.key === "g" || e.key === "G") {
-    toggleShowOrbits();
+function drawButton(x, y, width, height, text) {
+  ctx.beginPath();
+  ctx.rect(x, y, width, height);
+  ctx.fillStyle = "white";
+  ctx.fill();
+  ctx.fillStyle = "black";
+  ctx.font = "20px Arial";
+  ctx.fillText(text, x + 10, y + height / 2 + 5);
+}
+
+const buttons = [
+  { x: 10, y: 50, width: 100, height: 50, action: toggleShowOrbits },
+  { x: 10, y: 110, width: 100, height: 50, action: resetSimulation },
+  { x: 10, y: 170, width: 100, height: 50, action: () => { particles.length = 0; } },
+  {x: 10 , y: 230, width: 50, height: 50, action: toggleParticleSpawn},
+  {x: 70 , y: 230, width: 50, height: 50, action: toggleDiskSpawn},
+  {x: 10, y: 290, width: 100, height: 50, action: () => { spawnDisk = false; spawnParticle = false; } },
+  { x: 300, y: 10, width: 25, height: 25, action: () => { isPaused = !isPaused; console.log("pause"); } },
+  { x: 270, y: 10, width: 25, height: 25, action: () => { timeFactor *= 0.1; console.log("slow down"); } },
+  { x: 330, y: 10, width: 25, height: 25, action: () => { timeFactor *= 10; console.log("speed up"); } }
+];
+
+function toggleParticleSpawn() {
+  spawnParticle = !spawnParticle;
+  if (spawnParticle) {
+    spawnDisk = false; // Turn off the other mode
   }
-});
+}
 
-// mouse event for buttons
-canvas.addEventListener("click", (e) => {
-  const canvasRect = canvas.getBoundingClientRect();
-  const mouseX = e.clientX - canvasRect.left;
-  const mouseY = e.clientY - canvasRect.top;
-
-  // guide button
-  if (mouseX >= 10 && mouseX <= 110 && mouseY >= 50 && mouseY <= 100) {
-    toggleShowOrbits();
+function toggleDiskSpawn() {
+  spawnDisk = !spawnDisk;
+  if (spawnDisk) {
+    spawnParticle = false; // Turn off the other mode
   }
-  // reset button
-  else if (mouseX >= 10 && mouseX <= 110 && mouseY >= 110 && mouseY <= 150) {
-    resetSimulation();
-  }
-  // remove all particles button
-  else if (mouseX >= 10 && mouseX <= 110 && mouseY >= 170 && mouseY <= 210) {
-    particles.length = 0;
-    //render();
-  }
+}
 
-  // pause button
-  else if (mouseX >= 300 && mouseX <= 325 && mouseY >= 10 && mouseY <= 35) {
-    isPaused = !isPaused;
-    console.log("pause");
-  }
-  // slow down button
-  else if (mouseX >= 270 && mouseX <= 295 && mouseY >= 10 && mouseY <= 35) {
-    timeFactor *= 0.1;
-    console.log("slow down");
-  }
-  // speed up button
-  else if (mouseX >= 330 && mouseX <= 355 && mouseY >= 10 && mouseY <= 35) {
-    timeFactor *= 10;
-    console.log("speed up");
-  }  
-  else {
- // Create particles using the quadtree
- const numCircles = 15;
- const particlesPerCircle = 50;
- const circleRadius = 150;
- const circleSpacing = 10;
- const centerX = ((mouseX) / zoom);
- const centerY = ((mouseY) / zoom);
 
- for (let c = 0; c < numCircles; c++) {
-   const currentRadius = circleRadius - (c * circleSpacing);
+let panStartX = 0;
+let panStartY = 0;
+let isPanning = false;
 
-   for (let i = 0; i < particlesPerCircle; i++) {
-     const angle = (i / particlesPerCircle) * Math.PI * 2;
-     const particleX = centerX + Math.cos(angle) * currentRadius;
-     const particleY = centerY + Math.sin(angle) * currentRadius;
-     const mass = 1;
-     const color = "white";
-
-     const particle = new Particle(particleX, particleY, 0,0, mass, color);
-     particles.push(particle);
-     quadtree.insert(particle); // Insert the particle into the quadtree
-   }
- }
-
- render(); // Render the scene after adding particles
-
-  }
-
-  
-});
 canvas.addEventListener("contextmenu", (e) => {
-  if (e.button === 2) {
-    e.preventDefault(); // Prevent context menu for right-click
-  }
+  e.preventDefault(); // Prevent the default context menu
 });
 
-let isDragging = false;
-let lastMouseX = 0;
-let lastMouseY = 0;
-
-// Pan the camera using mouse drag
 canvas.addEventListener("mousedown", (e) => {
   if (e.button === 2) {
-    isDragging = true;
-    lastMouseX = e.clientX;
-    lastMouseY = e.clientY;
+  isPanning = true;
+  panStartX = e.clientX;
+  panStartY = e.clientY;
   }
 });
 
-document.addEventListener("mousemove", (e) => {
-  if (isDragging) {
-    const deltaX = (e.clientX - lastMouseX) / zoom;
-    const deltaY = (e.clientY - lastMouseY) / zoom;
+canvas.addEventListener("mousemove", (e) => {
+  if (isPanning) {
+    const deltaX = e.clientX - panStartX;
+    const deltaY = e.clientY - panStartY;
 
-    cameraX -= deltaX;
-    cameraY -= deltaY;
+    cameraX += deltaX / zoom;
+    cameraY += deltaY / zoom;
 
-    lastMouseX = e.clientX;
-    lastMouseY = e.clientY;
+    panStartX = e.clientX;
+    panStartY = e.clientY;
 
     render();
   }
 });
 
-document.addEventListener("mouseup", () => {
-  isDragging = false;
+canvas.addEventListener("mouseup", () => {
+  isPanning = false;
 });
 
-// Zoom using the mouse wheel
+canvas.addEventListener("mouseout", () => {
+  isPanning = false;
+});
+
+canvas.addEventListener("click", (e) => {
+  const canvasRect = canvas.getBoundingClientRect();
+  const mouseX = e.clientX - canvasRect.left;
+  const mouseY = e.clientY - canvasRect.top;
+  const adjustedMouseX = (mouseX - cameraX) / zoom;
+  const adjustedMouseY = (mouseY - cameraY) / zoom;
+
+  for (const button of buttons) {
+    if (
+      mouseX >= button.x && mouseX <= button.x + button.width &&
+      mouseY >= button.y && mouseY <= button.y + button.height
+    ) {
+      if (button.action === toggleParticleSpawn) {
+        spawnParticle = true;
+        spawnDisk = false; // Disable the other mode
+        console.log("particle spawn on");
+      } else if (button.action === toggleDiskSpawn) {
+        spawnParticle = false; // Disable the other mode
+        spawnDisk = true;
+        console.log("disk spawn on");
+      } else {
+        button.action();
+      }
+      render();
+      return; // Exit the loop and the rest of the event handling
+    }
+  }
+
+  if (spawnParticle) {
+    const particle = new Particle(
+      adjustedMouseX,
+      adjustedMouseY,
+      0,
+      0,
+      1000,
+      "blue"
+    );
+    particles.push(particle);
+    render();
+  }
+
+  if (spawnDisk) {
+   // Create particles using the quadtree
+const numCircles = 15;
+const particlesPerCircle = 50;
+const circleRadius = 150;
+const circleSpacing = 10;
+
+const canvasRect = canvas.getBoundingClientRect();
+const mouseX = e.clientX - canvasRect.left;
+const mouseY = e.clientY - canvasRect.top;
+const adjustedMouseX = (mouseX - cameraX) / zoom;
+const adjustedMouseY = (mouseY - cameraY) / zoom;
+
+for (let c = 0; c < numCircles; c++) {
+  const currentRadius = circleRadius - (c * circleSpacing);
+
+  for (let i = 0; i < particlesPerCircle; i++) {
+    const angle = (i / particlesPerCircle) * Math.PI * 2;
+    const distanceFromCenter = Math.sqrt(Math.random()) * currentRadius; // Randomize the distance for better distribution
+    const particleScreenX = adjustedMouseX + Math.cos(angle) * distanceFromCenter;
+    const particleScreenY = adjustedMouseY + Math.sin(angle) * distanceFromCenter;
+
+    // Convert screen coordinates back to world coordinates
+    const particleX = (particleScreenX * zoom) + cameraX;
+    const particleY = (particleScreenY * zoom) + cameraY;
+
+    const mass = 1;
+    const color = "white";
+
+    const particle = new Particle(particleX, particleY, 0, 0, mass, color);
+    particles.push(particle);
+    quadtree.insert(particle); // Insert the particle into the quadtree
+  }
+}
+
+
+    render();
+  }
+});
 canvas.addEventListener("wheel", (e) => {
   const zoomFactor = e.deltaY > 0 ? 1 / 1.1 : 1.1;
   zoom *= zoomFactor;
@@ -153,26 +192,17 @@ canvas.addEventListener("wheel", (e) => {
   render();
 });
 
-// particle class and functions "planets"
 class Particle {
   constructor(x, y, vx, vy, mass, color) {
-    this.x = x;
-    this.y = y;
-    this.vx = vx;
-    this.vy = vy;
-    this.mass = mass;
-    this.color = color;
-    this.orbitPath = []; // Store positions for orbit path
-    this.maxRadius = 10; // Maximum radius for particles
+    Object.assign(this, { x, y, vx, vy, mass, color });
+    this.orbitPath = [];
+    this.maxRadius = 10;
     this.radius = Math.min(Math.sqrt(this.mass) * 0.25, this.maxRadius);
   }
 
   update() {
-    this.orbitPath.push({ x: this.x, y: this.y }); // Store position for orbit path
-    if (this.orbitPath.length > 5000) {
-      this.orbitPath.shift(); // Keep a limited number of stored positions
-    }
-
+    this.orbitPath.push({ x: this.x, y: this.y });
+    if (this.orbitPath.length > 5000) this.orbitPath.shift();
     this.x += this.vx;
     this.y += this.vy;
   }
@@ -189,51 +219,34 @@ class Particle {
     const dx = other.x - this.x;
     const dy = other.y - this.y;
     const distanceSquared = dx * dx + dy * dy;
-
     if (distanceSquared === 0) return;
-
     const force = (G * this.mass * other.mass) / distanceSquared;
     const angle = Math.atan2(dy, dx);
-
     const forceX = force * Math.cos(angle);
     const forceY = force * Math.sin(angle);
-
     const ax = forceX / this.mass;
     const ay = forceY / this.mass;
-
     const deltaTime = timeFactor;
-    const impulseX = ax * deltaTime;
-    const impulseY = ay * deltaTime;
-
-    this.vx += impulseX;
-    this.vy += impulseY;
+    this.vx += ax * deltaTime;
+    this.vy += ay * deltaTime;
   }
 
   checkCollision(other) {
     const dx = other.x - this.x;
     const dy = other.y - this.y;
     const distanceSquared = dx * dx + dy * dy;
-
     if (distanceSquared < (this.radius + other.radius) ** 2) {
       const totalMass = this.mass + other.mass * 0.75;
-
       const averageVx = (this.vx * this.mass + other.vx * other.mass) / totalMass;
       const averageVy = (this.vy * this.mass + other.vy * other.mass) / totalMass;
 
-      this.mass = totalMass;
-      this.radius = Math.min(Math.sqrt(this.mass) * 0.75, this.maxRadius);
-
-      if (this.mass <= 5000) {
-        this.color = "white";
-      } else if (this.mass <= 10000) {
-        this.color = "yellow";
-      } else {
-        this.color = "red";
-      }
-
-      this.vx = averageVx;
-      this.vy = averageVy;
-
+      Object.assign(this, {
+        mass: totalMass,
+        radius: Math.min(Math.sqrt(totalMass) * 0.75, this.maxRadius),
+        color: this.mass <= 1000 ? "white" : this.mass <= 5000 ? "yellow" : "red",
+        vx: averageVx,
+        vy: averageVy,
+      });
       particles.splice(particles.indexOf(other), 1);
     }
   }
@@ -242,15 +255,14 @@ class Particle {
     if (showOrbits) {
       ctx.beginPath();
       ctx.moveTo(this.orbitPath[0].x, this.orbitPath[0].y);
-      for (const pos of this.orbitPath) {
-        ctx.lineTo(pos.x, pos.y);
-      }
+      for (const pos of this.orbitPath) ctx.lineTo(pos.x, pos.y);
       ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
       ctx.lineWidth = 1.5;
       ctx.stroke();
     }
   }
 }
+
 // spawn particles
 const particles = [];
 
@@ -260,22 +272,7 @@ const boundary = new Rectangle(0, 0, canvas.width, canvas.height);
 // Create the quadtree with an appropriate capacity
 const quadtree = new QuadTree(boundary, 4);
 
-for (let i = 0; i < MAX_PARTICLES; i++) {
-  const x = Math.random() * canvas.width;
-  const y = Math.random() * canvas.height;
-  const vx = (Math.random() - 0.5) * 0.5;
-  const vy = (Math.random() - 0.5) * 0.5;
-  const mass = Math.random() * 25;
-  const color = "white";
-
-  particles.push(new Particle(x, y, vx, vy, mass, color));
-  quadtree.insert(particles[particles.length - 1]); // Insert the newly created particle into the quadtree
-}
-
-// reset simulation
-function resetSimulation() {
-  quadtree.clear();
-  particles.length = 0;
+function spawnParticles() {
   for (let i = 0; i < MAX_PARTICLES; i++) {
     const x = Math.random() * canvas.width;
     const y = Math.random() * canvas.height;
@@ -283,10 +280,19 @@ function resetSimulation() {
     const vy = (Math.random() - 0.5) * 0.5;
     const mass = Math.random() * 25;
     const color = "white";
-
+  
     particles.push(new Particle(x, y, vx, vy, mass, color));
     quadtree.insert(particles[particles.length - 1]); // Insert the newly created particle into the quadtree
   }
+}
+
+spawnParticles();
+
+// reset simulation
+function resetSimulation() {
+  quadtree.clear();
+  particles.length = 0;
+  spawnParticles();
 }
 
 function render() {
@@ -294,9 +300,10 @@ function render() {
 
   // Apply canvas transformations for particle rendering
   ctx.save();
+  ctx.translate(window.innerWidth / 2, window.innerHeight / 2)
   ctx.scale(zoom, zoom);
-  ctx.translate(canvas.width / 2, canvas.height / 2);
-  ctx.translate(-cameraX, -cameraY);
+  ctx.translate(-window.innerWidth / 2 + cameraX, -window.innerHeight / 2 + cameraY);
+
 
   // Update particle positions and apply gravity
   for (const particle of particles) {
@@ -339,72 +346,25 @@ function render() {
 
   // Restore the original transformation for rendering UI elements
   ctx.restore();
+  
 
   
   // particle count
   ctx.font = "30px Arial";
   ctx.fillStyle = "white";
   ctx.fillText(`Particles: ${particles.length}`, 10, 30);
-
-  // guide button
-  ctx.beginPath();
-  ctx.rect(10, 50, 100, 50);
-  ctx.fillStyle = "white";
-  ctx.fill();
-  ctx.fillStyle = "black";
-  ctx.font = "20px Arial";
-  ctx.fillText("Guide", 20, 80);
-
-  // reset button
-  ctx.beginPath();
-  ctx.rect(10, 110, 100, 50);
-  ctx.fillStyle = "white";
-  ctx.fill();
-  ctx.fillStyle = "black";
-  ctx.font = "20px Arial";
-  ctx.fillText("Reset", 20, 140);
-
-  // remove all particles button
-  ctx.beginPath();
-  ctx.rect(10, 170, 100, 50);
-  ctx.fillStyle = "white";
-  ctx.fill();
-  ctx.fillStyle = "black";
-  ctx.font = "20px Arial";
-  ctx.fillText("Remove", 20, 200);
-
-
-  // pause button
-  ctx.beginPath();
-  ctx.rect(300, 10, 25, 25);
-  ctx.fillStyle = "white";
-  ctx.fill();
-  ctx.fillStyle = "black";
-  ctx.font = "20px Arial";
-  ctx.fillText("||", 305, 28);
-
-  // slow down button
-  ctx.beginPath();
-  ctx.rect(270, 10, 25, 25);
-  ctx.fillStyle = "white";
-  ctx.fill();
-  ctx.fillStyle = "black";
-  ctx.font = "20px Arial";
-  ctx.fillText("-", 277, 28);
-
-  // speed up button
-  ctx.beginPath();
-  ctx.rect(330, 10, 25, 25);
-  ctx.fillStyle = "white";
-  ctx.fill();
-  ctx.fillStyle = "black";
-  ctx.font = "20px Arial";
-  ctx.fillText("+", 337, 28);
-
-
-
-}
   
+  // draw buttons
+  drawButton(10, 50, 100, 50, "Guide");
+  drawButton(10, 110, 100, 50, "Reset");
+  drawButton(10, 170, 100, 50, "Remove");
+  drawButton(10, 230, 50, 50, "⭐️");
+  drawButton(70, 230, 50, 50, "💫");
+  drawButton(10, 290, 100, 50, "off");
+  drawButton(300, 10, 25, 25, "||");
+  drawButton(270, 10, 25, 25, "-");
+  drawButton(330, 10, 25, 25, "+");
+}  
 
 // Initialize quadtree and insert particles
 //const quadtree = new QuadTree(new Rectangle(0, 0, canvas.width, canvas.height), 4);
@@ -414,7 +374,7 @@ for (const particle of particles) {
 
 // Animation loop
 function animate(timestamp) {
-  let lastTimestamp;
+  let lastTimestamp = null;
   if (isPaused) {
     if (lastTimestamp === null) {
       lastTimestamp = timestamp;
@@ -423,7 +383,6 @@ function animate(timestamp) {
     requestAnimationFrame(animate);
     return;
   }
-
 
   for (const particle of particles) {
     for (const other of particles) {
