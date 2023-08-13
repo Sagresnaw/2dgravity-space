@@ -18,7 +18,7 @@ This is a JavaScript-based interactive simulation that models the gravitational 
 ## Usage
 
 - **Mouse Controls:** 
-  - Left-click and drag to pan around the canvas.
+  - Right-click and drag to pan around the canvas.
   - Use the mouse wheel to zoom in and out.
 
 - **Buttons:**
