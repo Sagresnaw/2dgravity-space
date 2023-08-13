@@ -36,4 +36,9 @@ This is a JavaScript-based interactive simulation that models the gravitational 
   - Clicking on the canvas with the "⭐️" mode active spawns individual particles.
   - Clicking on the canvas with the "💫" mode active spawns disks of particles.
 
+- **Known Bugs:**
+  - Camera and Mouse pointer become decoupled causing placement of particle/disks of particles to be offset from mouse.
+
+
+
 The idea comes from an old flash game that has been lost to time.
