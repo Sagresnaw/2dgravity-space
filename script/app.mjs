@@ -11,15 +11,15 @@ canvas.height = innerHeight;
 const virtualCanvasWidth = 10000;
 const virtualCanvasHeight = 10000;
 const ctx = canvas.getContext("2d");
-const MAX_PARTICLES = 2500;
+const MAX_PARTICLES = 1000;
 
 // Variables for time control
 let timeFactor = 1; // Initial time factor
 let isPaused = false; // Flag to indicate if simulation is paused
 
 // camera and zoom
-let cameraX = virtualCanvasWidth / 2;
-let cameraY = virtualCanvasHeight / 2;
+let cameraX = canvas.width / 2;
+let cameraY = canvas.height / 2;
 let zoom = 1;
 let showOrbits = false;
 
@@ -58,7 +58,7 @@ canvas.addEventListener("click", (e) => {
   // remove all particles button
   else if (mouseX >= 10 && mouseX <= 110 && mouseY >= 170 && mouseY <= 210) {
     particles.length = 0;
-    render();
+    //render();
   }
 
   // pause button
@@ -82,8 +82,8 @@ canvas.addEventListener("click", (e) => {
  const particlesPerCircle = 50;
  const circleRadius = 150;
  const circleSpacing = 10;
- const centerX = ((mouseX - cameraX) / zoom) + cameraX;
- const centerY = ((mouseY - cameraY) / zoom) + cameraY;
+ const centerX = ((mouseX) / zoom);
+ const centerY = ((mouseY) / zoom);
 
  for (let c = 0; c < numCircles; c++) {
    const currentRadius = circleRadius - (c * circleSpacing);
@@ -101,14 +101,17 @@ canvas.addEventListener("click", (e) => {
    }
  }
 
- //render(); // Render the scene after adding particles
+ render(); // Render the scene after adding particles
 
   }
 
   
 });
-// prevent right click menu and drag to pan
-canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+canvas.addEventListener("contextmenu", (e) => {
+  if (e.button === 2) {
+    e.preventDefault(); // Prevent context menu for right-click
+  }
+});
 
 let isDragging = false;
 let lastMouseX = 0;
@@ -144,7 +147,7 @@ document.addEventListener("mouseup", () => {
 
 // Zoom using the mouse wheel
 canvas.addEventListener("wheel", (e) => {
-  const zoomFactor = e.deltaY > 0 ? 1.1 : 1 / 1.1;
+  const zoomFactor = e.deltaY > 0 ? 1 / 1.1 : 1.1;
   zoom *= zoomFactor;
 
   render();
@@ -161,7 +164,7 @@ class Particle {
     this.color = color;
     this.orbitPath = []; // Store positions for orbit path
     this.maxRadius = 10; // Maximum radius for particles
-    this.radius = Math.min(Math.sqrt(this.mass) * 0.75, this.maxRadius);
+    this.radius = Math.min(Math.sqrt(this.mass) * 0.25, this.maxRadius);
   }
 
   update() {
@@ -212,13 +215,13 @@ class Particle {
     const distanceSquared = dx * dx + dy * dy;
 
     if (distanceSquared < (this.radius + other.radius) ** 2) {
-      const totalMass = this.mass + other.mass * 0.9;
+      const totalMass = this.mass + other.mass * 0.75;
 
       const averageVx = (this.vx * this.mass + other.vx * other.mass) / totalMass;
       const averageVy = (this.vy * this.mass + other.vy * other.mass) / totalMass;
 
       this.mass = totalMass;
-      this.radius = Math.min(Math.sqrt(this.mass) * 1.5, this.maxRadius);
+      this.radius = Math.min(Math.sqrt(this.mass) * 0.75, this.maxRadius);
 
       if (this.mass <= 5000) {
         this.color = "white";
@@ -262,7 +265,7 @@ for (let i = 0; i < MAX_PARTICLES; i++) {
   const y = Math.random() * canvas.height;
   const vx = (Math.random() - 0.5) * 0.5;
   const vy = (Math.random() - 0.5) * 0.5;
-  const mass = Math.random() * 20;
+  const mass = Math.random() * 25;
   const color = "white";
 
   particles.push(new Particle(x, y, vx, vy, mass, color));
@@ -278,7 +281,7 @@ function resetSimulation() {
     const y = Math.random() * canvas.height;
     const vx = (Math.random() - 0.5) * 0.5;
     const vy = (Math.random() - 0.5) * 0.5;
-    const mass = Math.random() * 20;
+    const mass = Math.random() * 25;
     const color = "white";
 
     particles.push(new Particle(x, y, vx, vy, mass, color));
@@ -287,20 +290,31 @@ function resetSimulation() {
 }
 
 function render() {
-  ctx.clearRect(0, 0, virtualCanvasWidth, virtualCanvasHeight);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   // Apply canvas transformations for particle rendering
   ctx.save();
-  ctx.translate(canvas.width / 2, canvas.height / 2);
   ctx.scale(zoom, zoom);
+  ctx.translate(canvas.width / 2, canvas.height / 2);
   ctx.translate(-cameraX, -cameraY);
-  ctx.restore();
 
+  // Update particle positions and apply gravity
+  for (const particle of particles) {
+    for (const other of particles) {
+      if (particle !== other) {
+        particle.applyGravity(other);
+      }
+    }
+    particle.update();
+  }
+
+  // Clear and update the QuadTree with new particle positions
   quadtree.clear();
   for (const particle of particles) {
     quadtree.insert(particle);
   }
 
+  // Collision checks
   for (const particle of particles) {
     const range = new Rectangle(
       particle.x - particle.radius,
@@ -317,7 +331,11 @@ function render() {
     }
   }
 
-  
+  // Render particles
+  for (const particle of particles) {
+    particle.drawOrbit();
+    particle.draw();
+  }
 
   // Restore the original transformation for rendering UI elements
   ctx.restore();
@@ -383,10 +401,7 @@ function render() {
   ctx.font = "20px Arial";
   ctx.fillText("+", 337, 28);
 
-  for (const particle of particles) {
-    particle.drawOrbit();
-    particle.draw();
-  }
+
 
 }
   
@@ -399,7 +414,11 @@ for (const particle of particles) {
 
 // Animation loop
 function animate(timestamp) {
+  let lastTimestamp;
   if (isPaused) {
+    if (lastTimestamp === null) {
+      lastTimestamp = timestamp;
+    }
     lastTimestamp = timestamp; // Update lastTimestamp to avoid sudden jumps when resuming
     requestAnimationFrame(animate);
     return;
