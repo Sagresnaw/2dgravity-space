@@ -140,7 +140,7 @@ canvas.addEventListener("click", (e) => {
       0,
       0,
       1000,
-      "blue"
+      "white"
     );
     particles.push(particle);
     render();
