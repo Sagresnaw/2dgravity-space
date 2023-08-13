@@ -1,5 +1,9 @@
 // Author: Chris Best
 
+
+// Import the QuadTree class from your quad.js file
+import { QuadTree, Rectangle, Point } from './quad.mjs';
+
 // basic setup
 const canvas = document.getElementById("screen");
 canvas.width = window.innerWidth;
@@ -72,18 +76,21 @@ canvas.addEventListener("click", (e) => {
   }  
   else {
 // Create a densely packed circle of particles at the clicked position
-const numParticlesInCircle = 30; // Adjust the number of particles as needed
-const circleRadius = 150; // Adjust the radius of the circle as needed
+const numCircles = 5; // Adjust the number of circles as needed
+const particlesPerCircle = 30; // Adjust the number of particles per circle as needed
+const circleRadius = 50; // Adjust the radius of the outer circle as needed
+const circleSpacing = 10; // Adjust the spacing between circles as needed
 const centerX = ((mouseX - cameraX) / zoom) + cameraX;
 const centerY = ((mouseY - cameraY) / zoom) + cameraY;
 
-for (let i = 0; i < numParticlesInCircle; i++) {
-  for (let j = 0; j < numParticlesInCircle; j++) {
-    const angle = (j / numParticlesInCircle) * Math.PI * 2;
-    const radius = (circleRadius / numParticlesInCircle) * i;
-    const particleX = centerX + Math.cos(angle) * radius;
-    const particleY = centerY + Math.sin(angle) * radius;
-    const mass =  1;
+for (let c = 0; c < numCircles; c++) {
+  const currentRadius = circleRadius - (c * circleSpacing);
+  
+  for (let i = 0; i < particlesPerCircle; i++) {
+    const angle = (i / particlesPerCircle) * Math.PI * 2;
+    const particleX = centerX + Math.cos(angle) * currentRadius;
+    const particleY = centerY + Math.sin(angle) * currentRadius;
+    const mass = 1;
     const color = "white";
 
     particles.push(new Particle(particleX, particleY, 0, 0, mass, color));
@@ -195,7 +202,7 @@ class Particle {
 
   update() {
     this.orbitPath.push({ x: this.x, y: this.y }); // Store position for orbit path
-    if (this.orbitPath.length > 900) {
+    if (this.orbitPath.length > 5000) {
       this.orbitPath.shift(); // Keep a limited number of stored positions
     }
 
@@ -214,53 +221,55 @@ class Particle {
     const G = 0.1;
     const dx = other.x - this.x;
     const dy = other.y - this.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
+    const distanceSquared = dx * dx + dy * dy;
 
-    if (distance === 0) return;
+    if (distanceSquared === 0) return;
 
-    const force = (G * this.mass * other.mass) / (distance * distance);
-    const ax = (force * dx) / distance;
-    const ay = (force * dy) / distance;
+    const force = (G * this.mass * other.mass) / distanceSquared;
+    const angle = Math.atan2(dy, dx);
 
-    const deltaTime = 1; // Adjust this based on your simulation timestep
-    const impulseX = (ax * deltaTime) / this.mass;
-    const impulseY = (ay * deltaTime) / this.mass;
+    const forceX = force * Math.cos(angle);
+    const forceY = force * Math.sin(angle);
+
+    const ax = forceX / this.mass;
+    const ay = forceY / this.mass;
+
+    const deltaTime = 1;
+    const impulseX = ax * deltaTime;
+    const impulseY = ay * deltaTime;
 
     this.vx += impulseX;
     this.vy += impulseY;
-}
+  }
 
+  checkCollision(other) {
+    const dx = other.x - this.x;
+    const dy = other.y - this.y;
+    const distanceSquared = dx * dx + dy * dy;
 
-checkCollision(other) {
-  const dx = other.x - this.x;
-  const dy = other.y - this.y;
-  const distance = Math.sqrt(dx * dx + dy * dy);
-
-  if (distance < this.radius + other.radius) {
+    if (distanceSquared < (this.radius + other.radius) ** 2) {
       const totalMass = this.mass + other.mass;
-      
-      // Calculate weighted average velocity based on masses
+
       const averageVx = (this.vx * this.mass + other.vx * other.mass) / totalMass;
       const averageVy = (this.vy * this.mass + other.vy * other.mass) / totalMass;
 
       this.mass = totalMass;
       this.radius = Math.min(Math.sqrt(this.mass) * 2, this.maxRadius);
-      
+
       if (this.mass <= 200) {
-          this.color = "white";
+        this.color = "white";
       } else if (this.mass <= 400) {
-          this.color = "yellow";
+        this.color = "yellow";
       } else {
-          this.color = "red";
+        this.color = "red";
       }
-      
-      // Apply weighted average velocity to the resulting particle
+
       this.vx = averageVx;
       this.vy = averageVy;
 
       particles.splice(particles.indexOf(other), 1);
+    }
   }
-}
 
   drawOrbit() {
     if (showOrbits) {
@@ -277,6 +286,13 @@ checkCollision(other) {
 }
 // spawn particles
 const particles = [];
+
+// Create a boundary for the quadtree
+const boundary = new Rectangle(0, 0, canvas.width, canvas.height);
+
+// Create the quadtree with an appropriate capacity
+const quadtree = new QuadTree(boundary, 4);
+
 for (let i = 0; i < MAX_PARTICLES; i++) {
   const x = Math.random() * canvas.width;
   const y = Math.random() * canvas.height;
@@ -286,6 +302,7 @@ for (let i = 0; i < MAX_PARTICLES; i++) {
   const color = "white";
 
   particles.push(new Particle(x, y, vx, vy, mass, color));
+  quadtree.insert(particles[particles.length - 1]); // Insert the newly created particle into the quadtree
 }
 
 // reset simulation
@@ -303,27 +320,37 @@ function resetSimulation() {
   }
 }
 
-// render function
 function render() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+  // Apply canvas transformations for particle rendering
   ctx.save();
   ctx.translate(canvas.width / 2, canvas.height / 2);
   ctx.scale(zoom, zoom);
   ctx.translate(-cameraX, -cameraY);
 
+  quadtree.clear();
   for (const particle of particles) {
-    for (const other of particles) {
+    quadtree.insert(particle);
+  }
+
+  for (const particle of particles) {
+    const range = new Rectangle(
+      particle.x - particle.radius,
+      particle.y - particle.radius,
+      particle.radius * 2,
+      particle.radius * 2
+    );
+    const nearbyParticles = quadtree.query(range);
+
+    for (const other of nearbyParticles) {
       if (particle !== other) {
-        particle.applyGravity(other);
         particle.checkCollision(other);
       }
     }
-    particle.update();
-    particle.draw();
-    particle.drawOrbit();
   }
 
+  // Restore the original transformation for rendering UI elements
   ctx.restore();
   // particle count
   ctx.font = "30px Arial";
@@ -385,11 +412,20 @@ function render() {
   ctx.font = "20px Arial";
   ctx.fillText("+", 337, 28);
 
+  for (const particle of particles) {
+    particle.drawOrbit();
+    particle.draw();
+  }
+
 }
 
-const timestep = 1 / 60; // Fixed timestep for simulation updates
-let lastTimestamp = 0;
+// Initialize quadtree and insert particles
+//const quadtree = new QuadTree(new Rectangle(0, 0, canvas.width, canvas.height), 4);
+for (const particle of particles) {
+  quadtree.insert(new Point(particle.x, particle.y));
+}
 
+// Animation loop
 function animate(timestamp) {
   if (isPaused) {
     lastTimestamp = timestamp; // Update lastTimestamp to avoid sudden jumps when resuming
@@ -397,24 +433,17 @@ function animate(timestamp) {
     return;
   }
 
-  const deltaTime = (timestamp - lastTimestamp) / 1000; // Convert to seconds
-  lastTimestamp = timestamp;
 
-  const scaledTimeFactor = timeFactor * deltaTime;
-
-  for (let i = 0; i < scaledTimeFactor; i++) {
-    for (const particle of particles) {
-      for (const other of particles) {
-        if (particle !== other) {
-          particle.applyGravity(other);
-          particle.checkCollision(other);
-        }
+  for (const particle of particles) {
+    for (const other of particles) {
+      if (particle !== other) {
+        particle.applyGravity(other);
       }
-      particle.update();
     }
+    particle.update();
   }
 
-  render();
+  render(); // Render particles and other elements on the canvas
   requestAnimationFrame(animate);
 }
 
